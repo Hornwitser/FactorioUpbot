@@ -329,7 +329,7 @@ class FactorioUpbot(Cog):
     @guild_only()
     @check(is_guild_admin)
     async def set_admin_role(self, ctx, role: Role = None):
-        """Role granting access to guild settings on the bot"""
+        """Role granting access to settings on the bot"""
         cfg = self.bot.my_config
         if role is not None:
             if not role.is_default():
