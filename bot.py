@@ -104,11 +104,11 @@ def prefixes(bot, msg):
     defaults = cfg['global']['dm-command-prefixes']
     return map(prefix_format, defaults)
 
-def find_server(server_cfg, servers):
+def find_game(server_cfg, games):
     matches = []
-    for server in servers:
-        if server.get('name') == server_cfg['name']:
-            matches.append(server)
+    for game in games:
+        if game.get('name') == server_cfg['name']:
+            matches.append(game)
 
     if matches:
         # XXX for now return the first match
@@ -117,7 +117,7 @@ def find_server(server_cfg, servers):
     return None
 
 
-async def check_guild(guild, guild_cfg, servers):
+async def check_guild(guild, guild_cfg, games):
     if not 'servers' in guild_cfg:
         return
 
@@ -132,14 +132,14 @@ async def check_guild(guild, guild_cfg, servers):
     logger.info(f"Checking for guild {guild.name}")
     messages = []
     for server_cfg in guild_cfg['servers']:
-        server = find_server(server_cfg, servers)
+        game = find_game(server_cfg, games)
 
-        messages.extend(await check_server(server_cfg, server, log_channel))
+        messages.extend(await check_server(server_cfg, game, log_channel))
 
     if messages:
         await log_channel.send(no_ping("\n".join(messages)))
 
-async def check_server(server_cfg, server, log_channel):
+async def check_server(server_cfg, game, log_channel):
     msg = None
 
     warnings = []
@@ -148,7 +148,7 @@ async def check_server(server_cfg, server, log_channel):
 
     state = server_cfg.setdefault('state', {})
     old_listed = state.get('listed')
-    new_listed = bool(server)
+    new_listed = bool(game)
 
     if old_listed is True:
         if not new_listed:
@@ -193,11 +193,11 @@ class FactorioUpbot(Cog):
     async def checker_loop(self):
         # Who thought it was a good idea to just swallow exceptions in tasks?
         try:
-            await self.check_servers()
+            await self.check_games()
         except Exception:
             print_exc()
 
-    async def check_servers(self):
+    async def check_games(self):
         cfg = self.bot.my_config
         url = 'https://multiplayer.factorio.com/get-games'
         params = {
@@ -206,12 +206,12 @@ class FactorioUpbot(Cog):
         }
 
         async with self.checker_session.get(url, params=params) as resp:
-            servers = await resp.json()
-            logger.info(f"Got response with {len(servers)} entries")
+            games = await resp.json()
+            logger.info(f"Got response with {len(games)} entries")
             for guild_id, guild_cfg in cfg['guilds'].items():
                 guild = self.bot.get_guild(int(guild_id))
                 if guild is not None:
-                    await check_guild(guild, guild_cfg, servers)
+                    await check_guild(guild, guild_cfg, games)
 
         write_config(self.bot.my_config)
 
