@@ -134,7 +134,6 @@ async def check_guild(guild, guild_cfg, servers):
     messages = []
     for server_cfg in guild_cfg['servers']:
         server = find_server(server_cfg, servers)
-        logger.info(f"found server {server}")
 
         messages.extend(await check_server(server_cfg, server, log_channel))
 
@@ -200,8 +199,6 @@ class FactorioUpbot(Cog):
             print_exc()
 
     async def check_servers(self):
-        logger.info("Checking servers")
-
         cfg = self.bot.my_config
         url = 'https://multiplayer.factorio.com/get-games'
         params = {
