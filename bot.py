@@ -42,9 +42,6 @@ def config_errors(ctx):
     guildcfg = ctx.bot.my_config['guilds'][str(ctx.guild.id)]
     errors = []
 
-    if not ctx.me.guild_permissions.manage_roles:
-        errors.append("Bot does not have permission to grant roles")
-
     if 'log-channel-id' in guildcfg:
         ch = ctx.guild.get_channel(int(guildcfg['log-channel-id']))
         if ch is not None and not ch.permissions_for(ctx.me).send_messages:
