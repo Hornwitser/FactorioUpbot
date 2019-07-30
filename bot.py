@@ -188,6 +188,7 @@ class FactorioUpbot(Cog):
 
         self.checker_session = aiohttp.ClientSession()
         self.checker_loop.start()
+        self.games_cache = []
 
     @tasks.loop(seconds=60)
     async def checker_loop(self):
@@ -214,6 +215,7 @@ class FactorioUpbot(Cog):
                 )
                 return
 
+            self.games_cache = games
             logger.info(f"Got response with {len(games)} entries")
             for guild_id, guild_cfg in cfg['guilds'].items():
                 guild = self.bot.get_guild(int(guild_id))
@@ -248,6 +250,34 @@ class FactorioUpbot(Cog):
 
         else:
             await ctx.send(f"This bot is private")
+
+    @command()
+    @guild_only()
+    @check(is_guild_admin)
+    async def status(self, ctx):
+        """Show the status of all currently tracked servers"""
+        cfg = self.bot.my_config
+        guild_cfg = cfg['guilds'][str(ctx.guild.id)]
+
+        server_cfgs = guild_cfg.get('servers')
+        if not server_cfgs:
+            await ctx.send("No servers have been added")
+            return
+
+        statuses = []
+        for server_cfg in server_cfgs:
+            game = find_game(server_cfg, self.games_cache)
+            if game:
+                statuses.append(
+                    f"\N{BALLOT BOX WITH CHECK} {server_cfg['name']} is listed"
+                )
+
+            else:
+                statuses.append(
+                    f"\N{WARNING SIGN} {server_cfg['name']} is not listed"
+                )
+
+        await ctx.send("\n".join(statuses))
 
     @command(name='add-server')
     @guild_only()
