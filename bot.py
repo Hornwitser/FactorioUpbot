@@ -294,7 +294,10 @@ class FactorioUpbot(Cog):
                 await ctx.send(msg)
                 return
 
-        server_cfgs.append({'name': name})
+        server_cfg = {'name': name}
+        game = find_game(server_cfg, self.games_cache)
+        server_cfg['listed'] = bool(game)
+        server_cfgs.append(server_cfg)
 
         msg = no_ping(f"Added {name} to the list of servers to check for")
         await send_and_warn(ctx, msg)
