@@ -146,25 +146,27 @@ async def check_server(server_cfg, server, log_channel):
     returned = []
     infos = []
 
-    if server_cfg['state'] == 'online':
-        if not server:
-            warnings.append(f"{server_cfg['name']} just went offline")
-            server_cfg['state'] = 'offline'
+    state = server_cfg.setdefault('state', {})
+    old_listed = state.get('listed')
+    new_listed = bool(server)
 
-    elif server_cfg['state'] == 'offline':
-        if server:
-            returned.append(f"{server_cfg['name']} is back online")
-            server_cfg['state'] = 'online'
+    if old_listed is True:
+        if not new_listed:
+            warnings.append(f"{server_cfg['name']} is no longer listed")
 
-    elif server_cfg['state'] == 'unknown':
-        if server:
-            infos.append(f"{server_cfg['name']} is online")
-            server_cfg['state'] = 'online'
+    elif old_listed is False:
+        if new_listed:
+            returned.append(f"{server_cfg['name']} is back on the list")
+
+    elif old_listed is None:
+        if new_listed:
+            infos.append(f"{server_cfg['name']} is listed")
 
         else:
-            warnings.append(f"{server_cfg['name']} is offline")
-            server_cfg['state'] = 'offline'
+            warnings.append(f"{server_cfg['name']} is not listed")
 
+
+    state['listed'] = new_listed
 
     msg = "\n".join(
         [f"\N{WARNING SIGN} {msg}" for msg in warnings]
@@ -260,7 +262,7 @@ class FactorioUpbot(Cog):
                 await ctx.send(msg)
                 return
 
-        server_cfgs.append({'name': name, 'state': 'unknown'})
+        server_cfgs.append({'name': name})
 
         msg = no_ping(f"Added {name} to the list of servers to check for")
         await send_and_warn(ctx, msg)
