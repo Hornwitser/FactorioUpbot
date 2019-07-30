@@ -133,11 +133,15 @@ async def check_guild(guild, guild_cfg, servers):
         return
 
     logger.info(f"Checking for guild {guild.name}")
+    messages = []
     for server_cfg in guild_cfg['servers']:
         server = find_server(server_cfg, servers)
         logger.info(f"found server {server}")
 
-        await check_server(server_cfg, server, log_channel)
+        messages.extend(await check_server(server_cfg, server, log_channel))
+
+    if messages:
+        await log_channel.send(no_ping("\n".join(messages)))
 
 async def check_server(server_cfg, server, log_channel):
     msg = None
@@ -168,14 +172,11 @@ async def check_server(server_cfg, server, log_channel):
 
     state['listed'] = new_listed
 
-    msg = "\n".join(
+    return (
         [f"\N{WARNING SIGN} {msg}" for msg in warnings]
         + [f"\N{WHITE HEAVY CHECK MARK} {msg}" for msg in returned]
         + [f"\N{BALLOT BOX WITH CHECK} {msg}" for msg in infos]
     )
-
-    if msg:
-        await log_channel.send(no_ping(msg))
 
 
 class FactorioUpbot(Cog):
