@@ -207,6 +207,13 @@ class FactorioUpbot(Cog):
 
         async with self.checker_session.get(url, params=params) as resp:
             games = await resp.json()
+            if type(games) is not list:
+                logger.error(
+                    "Unexpected response from get-games endpoint: "
+                    f"{games}"
+                )
+                return
+
             logger.info(f"Got response with {len(games)} entries")
             for guild_id, guild_cfg in cfg['guilds'].items():
                 guild = self.bot.get_guild(int(guild_id))
