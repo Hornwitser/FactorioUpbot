@@ -14,8 +14,7 @@ import discord.ext.tasks as tasks
 from config import write_config
 
 
-about_bot = """FactorioUpbot
-
+about_bot = """**FactorioUpbot**
 Bot for monitoring changes to servers in the Factorio public games\
  list.  Made by Hornwitser#6431
 """
