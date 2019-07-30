@@ -25,12 +25,10 @@ logger = getLogger(__name__)
 async def is_bot_owner(ctx):
     return await ctx.bot.is_owner(ctx.author)
 
-async def is_guild_owner(ctx):
-    return ctx.author.id == ctx.guild.owner.id or await is_bot_owner(ctx)
-
-async def is_admin(ctx):
-    if await is_guild_owner(ctx): return True
+async def is_guild_admin(ctx):
+    if await is_bot_owner(ctx): return True
     if ctx.guild is None: return False
+    if ctx.author.guild_permissions.administrator: return True
 
     cfg = ctx.bot.my_config
     role_id = cfg['guilds'][str(ctx.guild.id)].get('admin-role-id')
@@ -250,7 +248,7 @@ class FactorioUpbot(Cog):
 
     @command(name='add-server')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def add_server(self, ctx, name):
         """Add a server to check for online status"""
         cfg = self.bot.my_config
@@ -271,7 +269,7 @@ class FactorioUpbot(Cog):
 
     @command(name='remove-server')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def remove_server(self, ctx, name):
         """Remove server from being checked for online status"""
         cfg = self.bot.my_config
@@ -296,7 +294,7 @@ class FactorioUpbot(Cog):
 
     @command(name='set-admin-role')
     @guild_only()
-    @check(is_guild_owner)
+    @check(is_guild_admin)
     async def set_admin_role(self, ctx, role: Role = None):
         """Role granting access to guild settings on the bot"""
         cfg = self.bot.my_config
@@ -319,7 +317,7 @@ class FactorioUpbot(Cog):
 
     @command(name='set-log-channel')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def set_log_channel(self, ctx, ch: TextChannel = None):
         """Channel down messages are logged to"""
         cfg = self.bot.my_config
@@ -339,7 +337,7 @@ class FactorioUpbot(Cog):
 
     @command(name='set-bot-nick')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def set_bot_nick(self, ctx, *, nick=None):
         """Set the nickname of the bot for this guild"""
         if ctx.me.guild_permissions.change_nickname:
@@ -354,7 +352,7 @@ class FactorioUpbot(Cog):
 
     @command(name='set-bot-prefixes')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def set_bot_prefix(self, ctx, *prefixes):
         """Set the command prefixes of the bot for this guild"""
         cfg = self.bot.my_config
@@ -375,7 +373,7 @@ class FactorioUpbot(Cog):
 
     @command(name='check-config')
     @guild_only()
-    @check(is_admin)
+    @check(is_guild_admin)
     async def check_config(self, ctx):
         """Check for possible problems with the config and permissions"""
         problems = config_problems(ctx)
