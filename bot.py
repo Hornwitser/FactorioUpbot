@@ -14,6 +14,11 @@ import discord.ext.tasks as tasks
 from config import write_config
 
 
+about_bot = """FactorioUpbot
+
+Bot for monitoring changes to servers in the Factorio public games\
+ list.  Made by Hornwitser#6431
+"""
 logger = getLogger(__name__)
 
 # Can't use commands.is_owner because that doesn't let me easily reuse it
@@ -218,6 +223,11 @@ class FactorioUpbot(Cog):
     def cog_unload(self):
         self.checker_loop.cancel()
         create_task(self.checker_session.close())
+
+    @command()
+    async def about(self, ctx):
+        """About this bot"""
+        await ctx.send(about_bot)
 
     @command()
     async def invite(self, ctx):
