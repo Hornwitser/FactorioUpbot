@@ -181,6 +181,7 @@ class FactorioUpbot(Cog):
     def __init__(self, config, bot):
         self.bot = bot
         self.bot.my_config = config
+        self.app_info = None
 
         self.checker_session = aiohttp.ClientSession()
         self.checker_loop.start()
@@ -220,6 +221,20 @@ class FactorioUpbot(Cog):
     def cog_unload(self):
         self.checker_loop.cancel()
         create_task(self.checker_session.close())
+
+    @command()
+    async def invite(self, ctx):
+        """Gives an invite link for this bot"""
+        if self.app_info is None:
+            self.app_info = await self.bot.application_info()
+
+        if self.app_info.bot_public:
+            url = "https://discordapp.com/api/oauth2/authorize"
+            params = f"client_id={self.app_info.id}&scope=bot"
+            await ctx.send(f"<{url}?{params}>")
+
+        else:
+            await ctx.send(f"This bot is private")
 
     @command(name='add-server')
     @guild_only()
