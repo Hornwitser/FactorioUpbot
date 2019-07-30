@@ -125,10 +125,12 @@ async def check_guild(guild, guild_cfg, servers):
         return
 
     log_channel_id = guild_cfg.get('log-channel-id')
-    if log_channel_id is not None:
-        log_channel = guild.get_channel(int(log_channel_id))
-        if log_channel is None:
-            return
+    if log_channel_id is None:
+        return
+
+    log_channel = guild.get_channel(int(log_channel_id))
+    if log_channel is None:
+        return
 
     logger.info(f"Checking for guild {guild.name}")
     for server_cfg in guild_cfg['servers']:
