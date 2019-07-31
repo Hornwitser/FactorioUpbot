@@ -144,33 +144,54 @@ async def check_server(server_cfg, game, log_channel):
 
     warnings = []
     returned = []
+    locked = []
+    unlocked = []
     infos = []
 
     state = server_cfg.setdefault('state', {})
     old_listed = state.get('listed')
+    old_password = state.get('password')
     new_listed = bool(game)
+    new_password = game.get('has_password') if game else None
+
+    name = server_cfg['name']
 
     if old_listed is True:
         if not new_listed:
-            warnings.append(f"{server_cfg['name']} is no longer listed")
+            warnings.append(f"{name} is no longer listed")
+
+        elif new_password and not old_password:
+            locked.append(f"{name} is now password protected")
+
+        elif old_password and not new_password:
+            unlocked.append(f"{name} is no longer password protected")
 
     elif old_listed is False:
         if new_listed:
-            returned.append(f"{server_cfg['name']} is back on the list")
+            if new_password:
+                locked.append(f"{name} is back on the list password protected")
+            else:
+                returned.append(f"{name} is back on the list")
 
     elif old_listed is None:
         if new_listed:
-            infos.append(f"{server_cfg['name']} is listed")
+            if new_password:
+                locked.append(f"{name} is listed as password protected")
+            else:
+                infos.append(f"{name} is listed")
 
         else:
-            warnings.append(f"{server_cfg['name']} is not listed")
+            warnings.append(f"{name} is not listed")
 
 
     state['listed'] = new_listed
+    state['password'] = new_password
 
     return (
         [f"\N{WARNING SIGN} {msg}" for msg in warnings]
         + [f"\N{WHITE HEAVY CHECK MARK} {msg}" for msg in returned]
+        + [f"\N{LOCK} {msg}" for msg in locked]
+        + [f"\N{OPEN LOCK} {msg}" for msg in unlocked]
         + [f"\N{BALLOT BOX WITH CHECK} {msg}" for msg in infos]
     )
 
@@ -266,16 +287,20 @@ class FactorioUpbot(Cog):
 
         statuses = []
         for server_cfg in server_cfgs:
+            name = server_cfg['name']
             game = find_game(server_cfg, self.games_cache)
             if game:
-                statuses.append(
-                    f"\N{BALLOT BOX WITH CHECK} {server_cfg['name']} is listed"
-                )
+                if game.get('has_password'):
+                    statuses.append(
+                        f"\N{LOCK} {name} is listed as password protected"
+                    )
+                else:
+                    statuses.append(
+                        f"\N{BALLOT BOX WITH CHECK} {name} is listed"
+                    )
 
             else:
-                statuses.append(
-                    f"\N{WARNING SIGN} {server_cfg['name']} is not listed"
-                )
+                statuses.append(f"\N{WARNING SIGN} {name} is not listed")
 
         await ctx.send("\n".join(statuses))
 
@@ -297,6 +322,7 @@ class FactorioUpbot(Cog):
         server_cfg = {'name': name}
         game = find_game(server_cfg, self.games_cache)
         server_cfg['listed'] = bool(game)
+        server_cfg['password'] = game.get('has_password') if game else None
         server_cfgs.append(server_cfg)
 
         msg = no_ping(f"Added {name} to the list of servers to check for")
