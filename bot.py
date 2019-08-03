@@ -404,6 +404,41 @@ class FactorioUpbot(Cog):
         await send_and_warn(ctx, msg)
         write_config(cfg)
 
+    @command(name='remove-all')
+    @guild_only()
+    @check(is_guild_admin)
+    async def remove_all(self, ctx, pattern=""):
+        """Remove all server being checked that matches pattern"""
+        cfg = self.bot.my_config
+        guild_cfg = cfg['guilds'][str(ctx.guild.id)]
+
+        server_cfgs = guild_cfg.setdefault('servers', [])
+        if not server_cfgs:
+            await cxt.send("No servers are currently being checked for")
+            return
+
+        indices_to_remove = []
+        for index, server_cfg in enumerate(server_cfgs):
+            if pattern in server_cfg['name']:
+                indices_to_remove.append(index)
+
+        if not indices_to_remove:
+            await ctx.send("No server being checked for matched the pattern")
+            return
+
+        if len(indices_to_remove) == len(server_cfgs):
+            server_cfgs.clear()
+            msg = "Removed all servers currently being checked for"
+
+        else:
+            for index in reversed(indices_to_remove):
+                del server_cfgs[index]
+
+            msg = f"Removed {len(indices_to_remove)} servers being checked for"
+
+        await send_and_warn(ctx, msg)
+        write_config(cfg)
+
     @command(name='set-admin-role')
     @guild_only()
     @check(is_guild_admin)
