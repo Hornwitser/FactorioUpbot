@@ -329,6 +329,50 @@ class FactorioUpbot(Cog):
         await send_and_warn(ctx, msg)
         write_config(cfg)
 
+    @command(name='add-all')
+    @guild_only()
+    @check(is_guild_admin)
+    async def add_all(self, ctx, pattern):
+        """Add all servers containing the pattern in name"""
+        cfg = self.bot.my_config
+        guild_cfg = cfg['guilds'][str(ctx.guild.id)]
+        server_cfgs = guild_cfg.setdefault('servers', [])
+
+        if not pattern:
+            await ctx.send("Error: pattern cannot be empty")
+            return
+
+        to_add = []
+        for game in self.games_cache:
+            name = game.get('name', "")
+            if pattern in name:
+                for server_cfg in server_cfgs:
+                    if server_cfg['name'] == name:
+                        break # Already have this configured
+                else:
+                    to_add.append(game)
+
+        if not to_add:
+            await ctx.send("No additional servers matched the pattern")
+            return
+
+        if len(to_add) > 100:
+            await ctx.send(f"Refusing to add {len(to_add)} entries")
+            return
+
+        for game in to_add:
+            server_cfg = {'name': game.get('name', "")}
+            server_cfg['listed'] = True
+            server_cfg['password'] = game.get('has_password') if game else None
+            server_cfgs.append(server_cfg)
+
+        msg = no_ping(
+            f"Added {len(to_add)} new entries to the list of servers"
+            " to check for"
+        )
+        await send_and_warn(ctx, msg)
+        write_config(cfg)
+
     @command(name='remove-server')
     @guild_only()
     @check(is_guild_admin)
