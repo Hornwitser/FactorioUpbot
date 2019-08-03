@@ -274,7 +274,6 @@ class FactorioUpbot(Cog):
 
     @command()
     @guild_only()
-    @check(is_guild_admin)
     async def status(self, ctx):
         """Show the status of all currently tracked servers"""
         cfg = self.bot.my_config
