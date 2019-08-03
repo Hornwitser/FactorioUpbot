@@ -319,11 +319,14 @@ class FactorioUpbot(Cog):
                 await ctx.send(msg)
                 return
 
-        server_cfg = {'name': name}
         game = find_game(server_cfg, self.games_cache)
-        server_cfg['listed'] = bool(game)
-        server_cfg['password'] = game.get('has_password') if game else None
-        server_cfgs.append(server_cfg)
+        server_cfgs.append({
+            'name': name,
+            'state': {
+                'listed': bool(game),
+                'password': game.get('has_password') if game else None,
+            },
+        })
 
         msg = no_ping(f"Added {name} to the list of servers to check for")
         await send_and_warn(ctx, msg)
@@ -361,10 +364,13 @@ class FactorioUpbot(Cog):
             return
 
         for game in to_add:
-            server_cfg = {'name': game.get('name', "")}
-            server_cfg['listed'] = True
-            server_cfg['password'] = game.get('has_password') if game else None
-            server_cfgs.append(server_cfg)
+            server_cfgs.append({
+                'name': game['name'],
+                'state': {
+                    'listed': True,
+                    'password': game.get('has_password'),
+                },
+            })
 
         msg = no_ping(
             f"Added {len(to_add)} new entries to the list of servers"
