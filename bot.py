@@ -379,6 +379,7 @@ class FactorioUpbot(Cog):
         if player['last_seen'] == self.last_check:
             msg = f"{player_name} is on {server_name}"
         else:
+            delta = format_minutes((int(time()) - player['last_seen']) // 60)
             msg = f"{player_name} was last seen on {server_name} {delta} ago"
 
         duration = format_minutes(player['minutes'])
