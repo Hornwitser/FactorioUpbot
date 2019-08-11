@@ -25,11 +25,16 @@ Bot for monitoring changes to servers in the Factorio public games\
 logger = getLogger(__name__)
 
 def format_minutes(minutes):
-    """Returns a d/h/m string from a minute count"""
+    """Returns a y/d/h/m string from a minute count"""
+    years = minutes // (365 * 60 * 24)
+    minutes = minutes % (365 * 60 * 24)
     days = minutes // (60 * 24)
     minutes = minutes % (60 * 24)
     hours = minutes // 60
     minutes = minutes % 60
+
+    if years:
+        return f"{years}y {days}d {hours}h {minutes}m"
 
     if days:
         return f"{days}d {hours}h {minutes}m"
@@ -429,6 +434,29 @@ class FactorioUpbot(Cog):
             top_list.append(f"{time_seen} {player['name']}")
 
         await ctx.send(no_ping("\n".join(top_list)))
+
+    @command()
+    async def stats(self, ctx):
+        """Show statistics about the multiplayer servers"""
+        player_minutes = sum(
+            map(lambda p: p['minutes'], self.players_cache.values())
+        )
+
+        unique_players = set()
+        unique_versions = set()
+        for game in self.games_cache:
+            unique_players.update(game.get('players', []))
+
+            app_ver = game.get('application_version', {})
+            unique_versions.add(app_ver.get('game_version', 'unknown'))
+
+        await ctx.send(
+            f"{len(self.games_cache)} servers online accross"
+            f" {len(unique_versions)} different versions of Factorio\n"
+            f"{len(unique_players)} players currently online out of"
+            f" {len(self.players_cache)} seen with a"
+            f" combined playtime online of {format_minutes(player_minutes)}"
+        )
 
     @command()
     @guild_only()
