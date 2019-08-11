@@ -1,7 +1,10 @@
 from asyncio import create_task
+from collections import defaultdict
 from itertools import chain
+import json
 from logging import getLogger
 from sys import stderr
+from time import time
 from traceback import print_exception, print_exc
 
 import aiohttp
@@ -19,6 +22,21 @@ Bot for monitoring changes to servers in the Factorio public games\
  list.  Made by Hornwitser#6431
 """
 logger = getLogger(__name__)
+
+def format_minutes(minutes):
+    """Returns a d/h/m string from a minute count"""
+    days = minutes // (60 * 24)
+    minutes = minutes % (60 * 24)
+    hours = minutes // 60
+    minutes = minutes % 60
+
+    if days:
+        return f"{days}d {hours}h {minutes}m"
+
+    if hours:
+        return f"{hours}h {minutes}m"
+
+    return f"{minutes}m"
 
 # Can't use commands.is_owner because that doesn't let me easily reuse it
 async def is_bot_owner(ctx):
@@ -210,6 +228,8 @@ class FactorioUpbot(Cog):
         self.checker_session = aiohttp.ClientSession()
         self.checker_loop.start()
         self.games_cache = []
+        self.last_check = 0
+        self.load_players()
 
     @tasks.loop(seconds=60)
     async def checker_loop(self):
@@ -236,6 +256,7 @@ class FactorioUpbot(Cog):
                 )
                 return
 
+            self.last_check = int(time())
             self.games_cache = games
             logger.info(f"Got response with {len(games)} entries")
             for guild_id, guild_cfg in cfg['guilds'].items():
@@ -243,6 +264,7 @@ class FactorioUpbot(Cog):
                 if guild is not None:
                     await check_guild(guild, guild_cfg, games)
 
+        self.update_players(games)
         write_config(self.bot.my_config)
 
     @checker_loop.before_loop
@@ -252,6 +274,29 @@ class FactorioUpbot(Cog):
     def cog_unload(self):
         self.checker_loop.cancel()
         create_task(self.checker_session.close())
+
+    def update_players(self, games):
+        for game in self.games_cache:
+            game_players = game.get('players', [])
+            for player_name in game_players:
+                player = self.players_cache[player_name]
+                player['minutes'] = player.get('minutes', 0) + 1
+                player['last_server'] = game.get('name')
+                player['last_seen'] = self.last_check
+
+        with open('players.json', 'w') as players_file:
+            players_file.write(
+                json.dumps(self.players_cache, sort_keys=True, indent=4)
+            )
+
+    def load_players(self):
+        try:
+            with open('players.json') as players_file:
+                players = json.load(players_file)
+        except OSError:
+            players = {}
+
+        self.players_cache = defaultdict(lambda: {}, players)
 
     @command()
     async def about(self, ctx):
@@ -271,6 +316,27 @@ class FactorioUpbot(Cog):
 
         else:
             await ctx.send(f"This bot is private")
+
+    @command()
+    async def player(self, ctx, player_name):
+        if player_name not in self.players_cache:
+            await ctx.send("Haven't seen that player online")
+            return
+
+        player = self.players_cache[player_name]
+        server_name = player['last_server']
+        if server_name is None:
+            server_name = "_an unknown server_"
+
+        if player['last_seen'] == self.last_check:
+            msg = f"{player_name} is on {server_name}"
+        else:
+            msg = f"{player_name} was last seen on {server_name} {delta} ago"
+
+        duration = format_minutes(player['minutes'])
+        msg += f" and has been seen online for {duration}"
+        await ctx.send(no_ping(msg))
+
 
     @command()
     @guild_only()
