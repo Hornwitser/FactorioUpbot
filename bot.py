@@ -414,6 +414,22 @@ class FactorioUpbot(Cog):
 
         await ctx.send(no_ping("\n".join(servers)))
 
+    @command(name='top-players')
+    async def top_players(self, ctx):
+        """List the top 10 players by online play time"""
+        def key(player):
+            return player['minutes']
+
+        players = [{'name': k, **v} for k, v in self.players_cache.items()]
+        top = sorted(players, reverse=True, key=key)[:10]
+
+        top_list = []
+        for player in top:
+            time_seen = format_minutes(player['minutes'])
+            top_list.append(f"{time_seen} {player['name']}")
+
+        await ctx.send(no_ping("\n".join(top_list)))
+
     @command()
     @guild_only()
     async def status(self, ctx):
