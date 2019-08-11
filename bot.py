@@ -435,6 +435,29 @@ class FactorioUpbot(Cog):
 
         await ctx.send(no_ping("\n".join(top_list)))
 
+    @command(name='top-versions')
+    async def top_versions(self, ctx):
+        """List the top 10 versions by number of servers using it"""
+        counts = defaultdict(lambda: 0)
+
+        for game in self.games_cache:
+            app_ver = game.get('application_version', {})
+            ver = app_ver.get('game_version', 'unknown')
+            counts[ver] += 1
+
+        if not counts:
+            await ctx.send("No servers online")
+            return
+
+        top = sorted(counts.items(), reverse=True, key=lambda i: i[1])[:10]
+
+        top_list = []
+        for version, count in top:
+            top_list.append(f"`{version}` {count}")
+
+        await ctx.send(no_ping("\n".join(top_list)))
+
+
     @command()
     async def stats(self, ctx):
         """Show statistics about the multiplayer servers"""
