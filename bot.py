@@ -402,14 +402,24 @@ class FactorioUpbot(Cog):
         for server_cfg in server_cfgs:
             name = server_cfg['name']
             game = find_game(server_cfg, self.games_cache)
+
             if game:
+                limit = game.get('max_players', 0)
+                count = len(game.get('players', []))
+                players = f"`{count}/{limit if limit else '∞'}`"
+
+                app_ver = game.get('application_version', {})
+                ver = f"`{app_ver.get('game_version', 'unknown')}`"
+
                 if game.get('has_password'):
                     statuses.append(
-                        f"\N{LOCK} {name} is listed as password protected"
+                        f"\N{LOCK} {ver} {players} {name}"
+                        " is listed as password protected"
                     )
                 else:
                     statuses.append(
-                        f"\N{BALLOT BOX WITH CHECK} {name} is listed"
+                        f"\N{BALLOT BOX WITH CHECK} {ver} {players} {name}"
+                        " is listed"
                     )
 
             else:
