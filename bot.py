@@ -6,6 +6,7 @@ from logging import getLogger
 from sys import stderr
 from time import time
 from traceback import print_exception, print_exc
+from typing import Union
 
 import aiohttp
 from discord import HTTPException, TextChannel, Member, Role, utils
@@ -93,6 +94,33 @@ def config_warnings(ctx):
         if role is None:
             warnings.append("Configured admin role does not exist")
 
+    if 'role-pings' in guildcfg:
+        missing_count = 0
+        for role_id in guildcfg['role-pings']:
+            role = ctx.guild.get_role(role_id)
+            if role is None:
+                missing_count += 1
+                continue
+
+            if not role.mentionable:
+                warnings.append(f"{role.name} cannot be mentioned by the bot")
+
+        if missing_count:
+            warnings.append(f"{missing_count} role(s) to ping no longe exists")
+
+    if 'member-pings' in guildcfg:
+        missing_count = 0
+        for member_id in guildcfg['member-pings']:
+            member = ctx.guild.get_member(member_id)
+            if member is None:
+                missing_count += 1
+                continue
+
+        if missing_count:
+            warnings.append(
+                f"{missing_count} member(s) to ping are no longer present"
+            )
+
     return ["\N{WARNING SIGN} {}".format(e) for e in warnings]
 
 def config_problems(ctx):
@@ -149,13 +177,31 @@ async def check_guild(guild, guild_cfg, games):
 
     logger.info(f"Checking for guild {guild.name}")
     messages = []
+    should_ping = False
     for server_cfg in guild_cfg['servers']:
         game = find_game(server_cfg, games)
 
-        messages.extend(await check_server(server_cfg, game, log_channel))
+        ping, msgs = await check_server(server_cfg, game, log_channel)
+        should_ping = should_ping or ping
+        messages.extend(msgs)
 
     if messages:
-        await log_channel.send(no_ping("\n".join(messages)))
+        pings = []
+        if should_ping:
+            for role_id in guild_cfg.get('role-pings', []):
+                role = guild.get_role(role_id)
+                if role is not None:
+                    pings.append(role.mention)
+
+            for member_id in guild_cfg.get('member-pings', []):
+                member = guild.get_member(member_id)
+                if member is not None:
+                    pings.append(member.mention)
+
+        await log_channel.send("\n".join([
+            no_ping("\n".join(messages)),
+            " ".join(pings),
+        ]))
 
 async def check_server(server_cfg, game, log_channel):
     msg = None
@@ -205,13 +251,15 @@ async def check_server(server_cfg, game, log_channel):
     state['listed'] = new_listed
     state['password'] = new_password
 
-    return (
+    messages = (
         [f"\N{WARNING SIGN} {msg}" for msg in warnings]
         + [f"\N{WHITE HEAVY CHECK MARK} {msg}" for msg in returned]
         + [f"\N{LOCK} {msg}" for msg in locked]
         + [f"\N{OPEN LOCK} {msg}" for msg in unlocked]
         + [f"\N{BALLOT BOX WITH CHECK} {msg}" for msg in infos]
     )
+
+    return (bool(warnings), messages)
 
 
 class FactorioUpbot(Cog):
@@ -581,6 +629,39 @@ class FactorioUpbot(Cog):
                 msg = "Command prefixes is not set"
 
         await send_and_warn(ctx, msg)
+        write_config(cfg)
+
+    @command(name='set-unlisted-pings')
+    @guild_only()
+    @check(is_guild_admin)
+    async def set_unlisted_pings(self, ctx, *pings: Union[Role, Member]):
+        """Set the pings to emmit when a server becomes unlisted"""
+        cfg = self.bot.my_config
+        guild_cfg = cfg['guilds'][str(ctx.guild.id)]
+
+        if pings:
+            guild_cfg['role-pings'] = []
+            guild_cfg['member-pings'] = []
+            for ping in pings:
+                if isinstance(ping, Role):
+                    guild_cfg['role-pings'].append(ping.id)
+                else:
+                    guild_cfg['member-pings'].append(ping.id)
+
+            await send_and_warn(ctx, "Updated unlisted pings")
+
+        else:
+            if (
+                'role-pings' not in guild_cfg
+                and 'member-pings' not in guild_cfg
+            ):
+                await send_and_warn(ctx, "No unlisted pings")
+
+            else:
+                del guild_cfg['role-pings']
+                del guild_cfg['member-pings']
+                await send_and_warn(ctx, "Removed unlisted pings")
+
         write_config(cfg)
 
     @command(name='check-config')
