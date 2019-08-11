@@ -442,7 +442,7 @@ class FactorioUpbot(Cog):
                 await ctx.send(msg)
                 return
 
-        game = find_game(server_cfg, self.games_cache)
+        game = find_game({'name': name}, self.games_cache)
         server_cfgs.append({
             'name': name,
             'state': {
