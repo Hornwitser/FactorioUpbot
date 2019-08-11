@@ -385,6 +385,33 @@ class FactorioUpbot(Cog):
         msg += f" and has been seen online for {duration}"
         await ctx.send(no_ping(msg))
 
+    @command(name='top-servers')
+    async def top_servers(self, ctx):
+        """List the top 10 servers by current player count"""
+        def key(game):
+            players = len(game.get('players', []))
+            game_time = int(game.get('game_time_elapsed', '0'))
+            return (players, game_time)
+
+        top = sorted(self.games_cache, reverse=True, key=key)[:10]
+        if not top:
+            await ctx.send("No servers are listed")
+            return
+
+        servers = []
+        for game in top:
+            name = game.get('name', 'unknown')
+
+            limit = game.get('max_players', 0)
+            count = len(game.get('players', []))
+            players = f"`{count}/{limit if limit else '∞'}`"
+
+            app_ver = game.get('application_version', {})
+            ver = f"`{app_ver.get('game_version', 'unknown')}`"
+
+            servers.append(f"{ver} {players} {name}")
+
+        await ctx.send(no_ping("\n".join(servers)))
 
     @command()
     @guild_only()
