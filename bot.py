@@ -1,6 +1,5 @@
 from asyncio import create_task
 from collections import defaultdict
-from datetime import datetime
 from itertools import chain
 import json
 from logging import getLogger
@@ -14,9 +13,9 @@ from discord import HTTPException, TextChannel, Member, Role, utils
 from discord.ext.commands import \
     CheckFailure, Cog, CommandInvokeError, UserInputError, check, command, \
     guild_only
-import discord.ext.tasks as tasks
 
 from config import write_config
+from schedule import repeat
 
 
 about_bot = """**FactorioUpbot**
@@ -291,23 +290,24 @@ class FactorioUpbot(Cog):
         self.bot.my_config = config
         self.app_info = None
 
-        self.checker_session = aiohttp.ClientSession()
-        self.checker_loop.start()
+        self.checker_session = None
+        self.checker_loop = None
+
         self.games_cache = []
         self.last_check = 0
         self.load_players()
 
         self.ifxdbc = None
 
-    @tasks.loop(seconds=60)
-    async def checker_loop(self):
-        # Who thought it was a good idea to just swallow exceptions in tasks?
-        try:
-            await self.check_games()
-        except Exception:
-            print_exc()
+    @Cog.listener()
+    async def on_ready(self):
+        print("Ready")
+        if self.checker_session is None:
+            self.checker_session = aiohttp.ClientSession()
+            self.checker_loop = create_task(repeat(self.check_games, 60))
 
     async def check_games(self):
+        print(time() % 60)
         cfg = self.bot.my_config
         url = 'https://multiplayer.factorio.com/get-games'
         params = {
@@ -318,30 +318,28 @@ class FactorioUpbot(Cog):
         async with self.checker_session.get(url, params=params) as resp:
             games = await resp.json()
             check_time = int(time())
-            if type(games) is not list:
-                logger.error(
-                    "Unexpected response from get-games endpoint: "
-                    f"{games}"
-                )
-                return
 
-            self.last_check = check_time
-            self.games_cache = games
-            logger.info(f"Got response with {len(games)} entries")
-            for guild_id, guild_cfg in cfg['guilds'].items():
-                guild = self.bot.get_guild(int(guild_id))
-                if guild is not None:
-                    await check_guild(guild, guild_cfg, games)
-
-        self.update_players(games)
-        write_config(self.bot.my_config)
+        if type(games) is not list:
+            logger.error(
+                "Unexpected response from get-games endpoint: "
+                f"{games}"
+            )
+            return
 
         if self.ifxdbc is not None:
             await self.post_factorio_stats(games, check_time)
 
-    @checker_loop.before_loop
-    async def before_checker(self):
-        await self.bot.wait_until_ready()
+        logger.info(f"Got response with {len(games)} entries")
+        for guild_id, guild_cfg in cfg['guilds'].items():
+            guild = self.bot.get_guild(int(guild_id))
+            if guild is not None:
+                await check_guild(guild, guild_cfg, games)
+
+        self.update_players(games, check_time)
+        write_config(self.bot.my_config)
+
+        self.last_check = check_time
+        self.games_cache = games
 
     def cog_unload(self):
         self.checker_loop.cancel()
@@ -357,14 +355,14 @@ class FactorioUpbot(Cog):
                 'fields': fields,
             })
 
-    def update_players(self, games):
-        for game in self.games_cache:
+    def update_players(self, games, check_time):
+        for game in games:
             game_players = game.get('players', [])
             for player_name in game_players:
                 player = self.players_cache[player_name]
                 player['minutes'] = player.get('minutes', 0) + 1
                 player['last_server'] = game.get('name')
-                player['last_seen'] = self.last_check
+                player['last_seen'] = check_time
 
         with open('players.json', 'w') as players_file:
             players_file.write(
