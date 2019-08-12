@@ -1,5 +1,6 @@
 from asyncio import create_task
 from collections import defaultdict
+from datetime import datetime
 from itertools import chain
 import json
 from logging import getLogger
@@ -43,6 +44,18 @@ def format_minutes(minutes):
         return f"{hours}h {minutes}m"
 
     return f"{minutes}m"
+
+def version_stats(games):
+    versions = defaultdict(lambda: {'servers': 0, 'players': 0})
+
+    for game in games:
+        app_ver = game.get('application_version', {})
+        ver = app_ver.get('game_version', 'unknown')
+        versions[ver]['servers'] += 1
+        versions[ver]['players'] += len(game.get('players', []))
+
+    return versions
+
 
 # Can't use commands.is_owner because that doesn't let me easily reuse it
 async def is_bot_owner(ctx):
@@ -284,6 +297,8 @@ class FactorioUpbot(Cog):
         self.last_check = 0
         self.load_players()
 
+        self.ifxdbc = None
+
     @tasks.loop(seconds=60)
     async def checker_loop(self):
         # Who thought it was a good idea to just swallow exceptions in tasks?
@@ -302,6 +317,7 @@ class FactorioUpbot(Cog):
 
         async with self.checker_session.get(url, params=params) as resp:
             games = await resp.json()
+            check_time = int(time())
             if type(games) is not list:
                 logger.error(
                     "Unexpected response from get-games endpoint: "
@@ -309,7 +325,7 @@ class FactorioUpbot(Cog):
                 )
                 return
 
-            self.last_check = int(time())
+            self.last_check = check_time
             self.games_cache = games
             logger.info(f"Got response with {len(games)} entries")
             for guild_id, guild_cfg in cfg['guilds'].items():
@@ -320,6 +336,9 @@ class FactorioUpbot(Cog):
         self.update_players(games)
         write_config(self.bot.my_config)
 
+        if self.ifxdbc is not None:
+            await self.post_factorio_stats(games, check_time)
+
     @checker_loop.before_loop
     async def before_checker(self):
         await self.bot.wait_until_ready()
@@ -327,6 +346,16 @@ class FactorioUpbot(Cog):
     def cog_unload(self):
         self.checker_loop.cancel()
         create_task(self.checker_session.close())
+
+    async def post_factorio_stats(self, games, timestamp):
+        versions = version_stats(games)
+        for version, fields in versions.items():
+            await self.ifxdbc.write({
+                'measurement': 'version',
+                'time': timestamp * 10**9,
+                'tags': { 'version': version },
+                'fields': fields,
+            })
 
     def update_players(self, games):
         for game in self.games_cache:
@@ -438,13 +467,7 @@ class FactorioUpbot(Cog):
     @command(name='top-versions')
     async def top_versions(self, ctx):
         """List the top 10 versions by number of servers using it"""
-        versions = defaultdict(lambda: {'servers': 0, 'players': 0})
-
-        for game in self.games_cache:
-            app_ver = game.get('application_version', {})
-            ver = app_ver.get('game_version', 'unknown')
-            versions[ver]['servers'] += 1
-            versions[ver]['players'] += len(game.get('players', []))
+        versions = version_stats(self.games_cache)
 
         if not versions:
             await ctx.send("No servers online")
