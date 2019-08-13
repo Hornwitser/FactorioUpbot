@@ -534,15 +534,22 @@ class FactorioUpbot(Cog):
 
         unique_players = set()
         unique_versions = set()
+        has_password = 0
+        has_mods = 0
         for game in self.games_cache:
             unique_players.update(game.get('players', []))
 
             app_ver = game.get('application_version', {})
             unique_versions.add(app_ver.get('game_version', 'unknown'))
 
+            has_password += fbool(game.get('has_password'))
+            has_mods += fbool(game.get('has_mods'))
+
         await ctx.send(
             f"{len(self.games_cache)} servers online accross"
             f" {len(unique_versions)} different versions of Factorio\n"
+            f"{has_password} servers are password protected and"
+            f" {has_mods} servers use mods\n"
             f"{len(unique_players)} players currently online out of"
             f" {len(self.players_cache)} seen with a"
             f" combined playtime online of {format_minutes(player_minutes)}"
