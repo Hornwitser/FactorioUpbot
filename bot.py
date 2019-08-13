@@ -55,6 +55,20 @@ def version_stats(games):
 
     return versions
 
+def platform_stats(games):
+    platforms = defaultdict(lambda: {'servers': 0, 'players': 0})
+
+    for game in games:
+        app_ver = game.get('application_version', {})
+        plat = (
+            app_ver.get('platform', 'unknown'),
+            app_ver.get('build_mode', 'unknown'),
+        )
+
+        platforms[plat]['servers'] += 1
+        platforms[plat]['players'] += len(game.get('players', []))
+
+    return platforms
 
 # Can't use commands.is_owner because that doesn't let me easily reuse it
 async def is_bot_owner(ctx):
@@ -352,6 +366,15 @@ class FactorioUpbot(Cog):
                 'measurement': 'version',
                 'time': timestamp * 10**9,
                 'tags': { 'version': version },
+                'fields': fields,
+            })
+
+        platforms = platform_stats(games)
+        for (platform, build_mode), fields in platforms.items():
+            await self.ifxdbc.write({
+                'measurement': 'platform',
+                'time': timestamp * 10**9,
+                'tags': { 'platform': platform, 'build_mode': build_mode },
                 'fields': fields,
             })
 
