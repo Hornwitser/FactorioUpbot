@@ -83,6 +83,28 @@ def platform_stats(games):
 
     return platforms
 
+def password_stats(games):
+    passwords = defaultdict(lambda: {'servers': 0, 'players': 0})
+
+    for game in games:
+        password = fbool(game.get('has_password'))
+
+        passwords[password]['servers'] += 1
+        passwords[password]['players'] += len(game.get('players', []))
+
+    return passwords
+
+def mod_stats(games):
+    mods = defaultdict(lambda: {'servers': 0, 'players': 0})
+
+    for game in games:
+        modded = fbool(game.get('has_mods'))
+
+        mods[modded]['servers'] += 1
+        mods[modded]['players'] += len(game.get('players', []))
+
+    return mods
+
 # Can't use commands.is_owner because that doesn't let me easily reuse it
 async def is_bot_owner(ctx):
     return await ctx.bot.is_owner(ctx.author)
@@ -388,6 +410,24 @@ class FactorioUpbot(Cog):
                 'measurement': 'platform',
                 'time': timestamp * 10**9,
                 'tags': { 'platform': platform, 'build_mode': build_mode },
+                'fields': fields,
+            })
+
+        passwords = password_stats(games)
+        for password, fields in passwords.items():
+            await self.ifxdbc.write({
+                'measurement': 'has_password',
+                'time': timestamp * 10**9,
+                'tags': { 'has_password': 'yes' if password else 'no' },
+                'fields': fields,
+            })
+
+        mods = mod_stats(games)
+        for modded, fields in mods.items():
+            await self.ifxdbc.write({
+                'measurement': 'has_mods',
+                'time': timestamp * 10**9,
+                'tags': { 'has_mods': 'yes' if modded else 'no' },
                 'fields': fields,
             })
 
