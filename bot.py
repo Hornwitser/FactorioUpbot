@@ -24,6 +24,19 @@ Bot for monitoring changes to servers in the Factorio public games\
 """
 logger = getLogger(__name__)
 
+def fbool(factorio_boolean):
+    """Convert a Factorio boolean to python boolean"""
+    if type(factorio_boolean) is bool:
+        return factorio_boolean
+
+    if type(factorio_boolean) is str:
+        return factorio_boolean == 'true'
+
+    if factorio_boolean is None:
+        return False
+
+    raise TypeError(f"Expected str or bool, not {factorio_boolean!r}")
+
 def format_minutes(minutes):
     """Returns a y/d/h/m string from a minute count"""
     years = minutes // (365 * 60 * 24)
@@ -247,7 +260,7 @@ async def check_server(server_cfg, game, log_channel):
     old_listed = state.get('listed')
     old_password = state.get('password')
     new_listed = bool(game)
-    new_password = game.get('has_password') if game else None
+    new_password = fbool(game.get('has_password')) if game else None
 
     name = server_cfg['name']
 
@@ -560,7 +573,7 @@ class FactorioUpbot(Cog):
                 app_ver = game.get('application_version', {})
                 ver = f"`{app_ver.get('game_version', 'unknown')}`"
 
-                if game.get('has_password'):
+                if fbool(game.get('has_password')):
                     statuses.append(
                         f"\N{LOCK} {ver} {players} {name}"
                         " is listed as password protected"
@@ -596,7 +609,7 @@ class FactorioUpbot(Cog):
             'name': name,
             'state': {
                 'listed': bool(game),
-                'password': game.get('has_password') if game else None,
+                'password': fbool(game.get('has_password')) if game else None,
             },
         })
 
@@ -640,7 +653,7 @@ class FactorioUpbot(Cog):
                 'name': game['name'],
                 'state': {
                     'listed': True,
-                    'password': game.get('has_password'),
+                    'password': fbool(game.get('has_password')),
                 },
             })
 
