@@ -105,6 +105,17 @@ def mod_stats(games):
 
     return mods
 
+def popular_stats(games, popular_games):
+    popular = defaultdict(lambda: {'players': 0})
+
+    for game in games:
+        name = game.get('name', 'unknown')
+        player_count = len(game.get('players', []))
+        if name in popular_games or player_count >= 10:
+            popular[name]['players'] = player_count
+
+    return popular
+
 # Can't use commands.is_owner because that doesn't let me easily reuse it
 async def is_bot_owner(ctx):
     return await ctx.bot.is_owner(ctx.author)
@@ -241,7 +252,6 @@ async def check_guild(guild, guild_cfg, games):
     if log_channel is None:
         return
 
-    logger.info(f"Checking for guild {guild.name}")
     messages = []
     should_ping = False
     for server_cfg in guild_cfg['servers']:
@@ -365,6 +375,7 @@ class FactorioUpbot(Cog):
         self.last_check = 0
         self.load_players()
         self.load_top_lists()
+        self.load_popular()
 
         self.ifxdbc = None
 
@@ -376,7 +387,6 @@ class FactorioUpbot(Cog):
             self.checker_loop = create_task(repeat(self.check_games, 60))
 
     async def check_games(self):
-        print(time() % 60)
         cfg = self.bot.my_config
         url = 'https://multiplayer.factorio.com/get-games'
         params = {
@@ -398,7 +408,6 @@ class FactorioUpbot(Cog):
         if self.ifxdbc is not None:
             await self.post_factorio_stats(games, check_time)
 
-        logger.info(f"Got response with {len(games)} entries")
         for guild_id, guild_cfg in cfg['guilds'].items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is not None:
@@ -411,6 +420,7 @@ class FactorioUpbot(Cog):
         self.games_cache = games
 
         self.update_top_lists(games, check_time)
+        self.update_popular(games, check_time)
 
     def cog_unload(self):
         self.checker_loop.cancel()
@@ -450,6 +460,15 @@ class FactorioUpbot(Cog):
                 'measurement': 'has_mods',
                 'time': timestamp * 10**9,
                 'tags': { 'has_mods': 'yes' if modded else 'no' },
+                'fields': fields,
+            })
+
+        popular = popular_stats(games, self.popular_cache)
+        for name, fields in popular.items():
+            await self.ifxdbc.write({
+                'measurement': 'popular',
+                'time': timestamp * 10**9,
+                'tags': { 'game_name': name },
                 'fields': fields,
             })
 
@@ -519,6 +538,30 @@ class FactorioUpbot(Cog):
             }
 
         self.top_lists_cache = top_lists
+
+    def update_popular(self, games, check_time):
+        for game in games:
+            if len(game.get('players', [])) >= 10:
+                self.popular_cache[game.get('name', 'unknown')] = check_time
+
+        cutoff = check_time - 60*60*12
+        for name, time in list(self.popular_cache.items()):
+            if time < cutoff:
+                del self.popular_cache[name]
+
+        with open('popular.json', 'w') as popular_file:
+            popular_file.write(
+                json.dumps(self.popular_cache, sort_keys=True, indent=4)
+            )
+
+    def load_popular(self):
+        try:
+            with open('popular.json') as popular_file:
+                popular = json.load(popular_file)
+        except OSError:
+            popular = {}
+
+        self.popular_cache = popular
 
     @command()
     async def about(self, ctx):
