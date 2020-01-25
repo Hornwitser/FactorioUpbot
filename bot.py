@@ -327,6 +327,25 @@ async def check_server(server_cfg, game, log_channel):
 
     return (bool(warnings), messages)
 
+def filter_duplicate_top_games(games):
+    """Remove games listed twice in a 12 hour period"""
+    listed = {}
+    indices = []
+    for index, game in enumerate(games):
+        name = game.get('name', 'unknown')
+        if name in listed:
+            for time in listed[name]:
+                if abs(time - game['_time']) < 60*60*12:
+                    indices.append(index)
+                    break
+            else:
+                listed[name].push(game['_time'])
+        else:
+            listed[name] = [game['_time']]
+
+    for index in reversed(indices):
+        del games[index]
+
 
 class FactorioUpbot(Cog):
     async def bot_check(self, ctx):
@@ -345,6 +364,7 @@ class FactorioUpbot(Cog):
         self.games_cache = []
         self.last_check = 0
         self.load_players()
+        self.load_top_lists()
 
         self.ifxdbc = None
 
@@ -389,6 +409,8 @@ class FactorioUpbot(Cog):
 
         self.last_check = check_time
         self.games_cache = games
+
+        self.update_top_lists(games, check_time)
 
     def cog_unload(self):
         self.checker_loop.cancel()
@@ -454,6 +476,50 @@ class FactorioUpbot(Cog):
 
         self.players_cache = defaultdict(lambda: {}, players)
 
+    def update_top_lists(self, games, check_time):
+        by_players = lambda g: len(g.get('players', []))
+        top_games = sorted(games, key=by_players, reverse=True)[:20]
+
+        for game in top_games:
+            game['_time'] = check_time
+
+        cutoff = {
+            'day': check_time - 60*60*24,
+            'week': check_time - 60*60*24*7,
+            'month': check_time - 60*60*24*30,
+            'year': check_time - 60*60*24*365,
+            'all': 0,
+        }
+
+        for key, top_list in self.top_lists_cache['servers'].items():
+            fresh = lambda g: g['_time'] >= cutoff[key]
+            top_list = list(filter(fresh, top_list)) + top_games
+            top_list.sort(key=by_players, reverse=True)
+            filter_duplicate_top_games(top_list)
+            self.top_lists_cache['servers'][key] = top_list[:20]
+
+        with open('top-lists.json', 'w') as top_lists_file:
+            top_lists_file.write(
+                json.dumps(self.top_lists_cache, sort_keys=True, indent=4)
+            )
+
+    def load_top_lists(self):
+        try:
+            with open('top-lists.json') as top_lists_file:
+                top_lists = json.load(top_lists_file)
+        except OSError:
+            top_lists = {
+                'servers': {
+                    'day': [],
+                    'week': [],
+                    'month': [],
+                    'year': [],
+                    'all': [],
+                }
+            }
+
+        self.top_lists_cache = top_lists
+
     @command()
     async def about(self, ctx):
         """About this bot"""
@@ -495,14 +561,26 @@ class FactorioUpbot(Cog):
         await ctx.send(no_ping(msg))
 
     @command(name='top-servers')
-    async def top_servers(self, ctx):
+    async def top_servers(self, ctx, period=None):
         """List the top 10 servers by current player count"""
+        if (
+            period is not None and
+            period not in ['day', 'week', 'month', 'year', 'all']
+        ):
+            msg = "Expected period to be one of day, week, month, year and all"
+            await ctx.send(msg)
+            return
+
         def key(game):
             players = len(game.get('players', []))
             game_time = int(game.get('game_time_elapsed', '0'))
             return (players, game_time)
 
-        top = sorted(self.games_cache, reverse=True, key=key)[:10]
+        if period:
+            top = self.top_lists_cache['servers'][period][:10]
+        else:
+            top = sorted(self.games_cache, reverse=True, key=key)[:10]
+
         if not top:
             await ctx.send("No servers are listed")
             return
