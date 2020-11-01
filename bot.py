@@ -349,7 +349,7 @@ def filter_duplicate_top_games(games):
                     indices.append(index)
                     break
             else:
-                listed[name].push(game['_time'])
+                listed[name].append(game['_time'])
         else:
             listed[name] = [game['_time']]
 
@@ -373,11 +373,11 @@ class FactorioUpbot(Cog):
 
         self.games_cache = []
         self.last_check = 0
-        self.load_players()
         self.load_top_lists()
         self.load_popular()
 
         self.ifxdbc = None
+        self.pgpool = None
 
     @Cog.listener()
     async def on_ready(self):
@@ -413,7 +413,7 @@ class FactorioUpbot(Cog):
             if guild is not None:
                 await check_guild(guild, guild_cfg, games)
 
-        self.update_players(games, check_time)
+        await self.update_players(games, check_time)
         write_config(self.bot.my_config)
 
         self.last_check = check_time
@@ -472,28 +472,17 @@ class FactorioUpbot(Cog):
                 'fields': fields,
             })
 
-    def update_players(self, games, check_time):
+    async def update_players(self, games, check_time):
         for game in games:
             game_players = game.get('players', [])
-            for player_name in game_players:
-                player = self.players_cache[player_name]
-                player['minutes'] = player.get('minutes', 0) + 1
-                player['last_server'] = game.get('name')
-                player['last_seen'] = check_time
-
-        with open('players.json', 'w') as players_file:
-            players_file.write(
-                json.dumps(self.players_cache, sort_keys=True, indent=4)
-            )
-
-    def load_players(self):
-        try:
-            with open('players.json') as players_file:
-                players = json.load(players_file)
-        except OSError:
-            players = {}
-
-        self.players_cache = defaultdict(lambda: {}, players)
+            if game_players:
+                await self.pgpool.executemany('''
+                    INSERT INTO players (name, last_seen, last_server, minutes)
+                    VALUES ($1, $2, $3, 1)
+                    ON CONFLICT (name) DO UPDATE SET
+                    (last_seen, last_server, minutes)
+                        = ($2, $3, players.minutes + 1);
+                ''', [(p, check_time, game.get('name')) for p in game_players])
 
     def update_top_lists(self, games, check_time):
         by_players = lambda g: len(g.get('players', []))
@@ -584,20 +573,24 @@ class FactorioUpbot(Cog):
 
     @command()
     async def player(self, ctx, player_name):
-        if player_name not in self.players_cache:
+        player = await self.pgpool.fetchrow("""
+            SELECT name, last_seen, last_server, minutes FROM players
+            WHERE lower(players.name) = lower($1);
+        """, player_name)
+        if player is None:
             await ctx.send("Haven't seen that player online")
             return
 
-        player = self.players_cache[player_name]
+        name = player['name']
         server_name = player['last_server']
         if server_name is None:
             server_name = "_an unknown server_"
 
         if player['last_seen'] == self.last_check:
-            msg = f"{player_name} is on {server_name}"
+            msg = f"{name} is on {server_name}"
         else:
             delta = format_minutes((int(time()) - player['last_seen']) // 60)
-            msg = f"{player_name} was last seen on {server_name} {delta} ago"
+            msg = f"{name} was last seen on {server_name} {delta} ago"
 
         duration = format_minutes(player['minutes'])
         msg += f" and has been seen online for {duration}"
@@ -646,11 +639,9 @@ class FactorioUpbot(Cog):
     @command(name='top-players')
     async def top_players(self, ctx):
         """List the top 10 players by online play time"""
-        def key(player):
-            return player['minutes']
-
-        players = [{'name': k, **v} for k, v in self.players_cache.items()]
-        top = sorted(players, reverse=True, key=key)[:10]
+        top = await self.pgpool.fetch("""
+            SELECT name, minutes FROM players ORDER BY minutes DESC LIMIT 10;
+        """)
 
         top_list = []
         for player in top:
@@ -689,9 +680,9 @@ class FactorioUpbot(Cog):
     @command()
     async def stats(self, ctx):
         """Show statistics about the multiplayer servers"""
-        player_minutes = sum(
-            map(lambda p: p['minutes'], self.players_cache.values())
-        )
+        row = await self.pgpool.fetchrow("""
+            SELECT SUM(minutes) AS sum, COUNT(*) AS count FROM players;
+        """)
 
         unique_players = set()
         unique_versions = set()
@@ -712,8 +703,8 @@ class FactorioUpbot(Cog):
             f"{has_password} servers are password protected and"
             f" {has_mods} servers use mods\n"
             f"{len(unique_players)} players currently online out of"
-            f" {len(self.players_cache)} seen with a"
-            f" combined playtime online of {format_minutes(player_minutes)}"
+            f" {row['count']} seen with a"
+            f" combined playtime online of {format_minutes(row['sum'])}"
         )
 
     @command()
