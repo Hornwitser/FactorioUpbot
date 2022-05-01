@@ -26,7 +26,11 @@ if __name__ == '__main__':
     ))
 
     if 'ifxdb' in config:
-        ifxdbc = InfluxDBClient(db=config['ifxdb'])
+        ifxdbc = InfluxDBClient(
+            db=config['ifxdb'],
+            username=config['ifxuser'],
+            password=config['ifxpassword']
+        )
         cog.ifxdbc = ifxdbc
         bot.run(config['bot-token'])
         # I hate you
