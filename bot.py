@@ -473,16 +473,18 @@ class FactorioUpbot(Cog):
             })
 
     async def update_players(self, games, check_time):
-        for game in games:
-            game_players = game.get('players', [])
-            if game_players:
-                await self.pgpool.executemany('''
-                    INSERT INTO players (name, last_seen, last_server, minutes)
-                    VALUES ($1, $2, $3, 1)
-                    ON CONFLICT (name) DO UPDATE SET
-                    (last_seen, last_server, minutes)
-                        = ($2, $3, players.minutes + 1);
-                ''', [(p, check_time, game.get('name')) for p in game_players])
+        async with self.pgpool.acquire() as con:
+            async with con.transaction():
+                for game in games:
+                    game_players = game.get('players', [])
+                    if game_players:
+                        await con.executemany('''
+                            INSERT INTO players (name, last_seen, last_server, minutes)
+                            VALUES ($1, $2, $3, 1)
+                            ON CONFLICT (name) DO UPDATE SET
+                            (last_seen, last_server, minutes)
+                                = ($2, $3, players.minutes + 1);
+                        ''', [(p, check_time, game.get('name')) for p in game_players])
 
     def update_top_lists(self, games, check_time):
         by_players = lambda g: len(g.get('players', []))
