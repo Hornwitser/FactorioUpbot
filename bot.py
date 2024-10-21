@@ -479,12 +479,12 @@ class FactorioUpbot(Cog):
                     game_players = game.get('players', [])
                     if game_players:
                         await con.executemany('''
-                            INSERT INTO players (name, last_seen, last_server, minutes)
-                            VALUES ($1, $2, $3, 1)
+                            INSERT INTO players (name, last_seen, last_server, minutes, first_seen)
+                            VALUES ($1, $2, $3, 1, $4)
                             ON CONFLICT (name) DO UPDATE SET
                             (last_seen, last_server, minutes)
                                 = ($2, $3, players.minutes + 1);
-                        ''', [(p, check_time, game.get('name')) for p in game_players])
+                        ''', [(p, check_time, game.get('name'), check_time) for p in game_players])
 
     def update_top_lists(self, games, check_time):
         by_players = lambda g: len(g.get('players', []))
